@@ -11,13 +11,17 @@ from api.v1.views import app_views
 
 app = Flask(__name__)
 app.register_blueprint(app_views)
-CORS(app)
+CORS(app=app)
 
 # Initialize auth based on AUTH_TYPE environment variable
 auth = None
-if os.getenv('AUTH_TYPE') == 'auth':
+if os.getenv('AUTH_TYPE') == 'basic_auth':
+    from api.v1.auth.basic_auth import BasicAuth
+    auth = BasicAuth()
+elif os.getenv('AUTH_TYPE') == 'auth':
     from api.v1.auth.auth import Auth
     auth = Auth()
+
 
 @app.errorhandler(401)
 def unauthorized(error):
@@ -32,6 +36,7 @@ def unauthorized(error):
     """
     return jsonify({"error": "Unauthorized"}), 401
 
+
 @app.errorhandler(403)
 def forbidden(error):
     """
@@ -41,9 +46,28 @@ def forbidden(error):
         error: The error object.
 
     Returns:
-        JSON response with error message and 403 status code.
+        JSON response with error message and 401 status code.
     """
     return jsonify({"error": "Forbidden"}), 403
+
+
+@app.route('/debug_routes', methods=['GET'])
+def debug_routes():
+    """
+    List all registered routes for debugging.
+
+    Returns:
+        JSON response with list of routes, including endpoints, methods, and rules.
+    """
+    routes = []
+    for rule in sorted(app.url_map.iter_rules(), key=lambda x: x.rule):
+        routes.append({
+            'endpoint': rule.endpoint,
+            'methods': sorted(list(rule.methods)),
+            'rule': str(rule)
+        })
+    return jsonify(routes)
+
 
 @app.before_request
 def before_request():
@@ -51,13 +75,15 @@ def before_request():
     Filter requests before processing to enforce authentication.
 
     - Does nothing if auth is None.
-    - Does nothing if the request path is in ['/api/v1/status/', '/api/v1/unauthorized/', '/api/v1/forbidden/'].
+    - Does nothing if the request path is in ['/api/v1/status/',
+      '/api/v1/unauthorized/', '/api/v1/forbidden/'].
     - Aborts with 401 if auth.authorization_header(request) returns None.
     - Aborts with 403 if auth.current_user(request) returns None.
     """
     if auth is None:
         return
-    excluded_paths = ['/api/v1/status/', '/api/v1/unauthorized/', '/api/v1/forbidden/']
+    excluded_paths = ['/api/v1/status/', '/api/v1/unauthorized/',
+                      '/api/v1/forbidden/']
     if not auth.require_auth(request.path, excluded_paths):
         return
     if auth.authorization_header(request) is None:

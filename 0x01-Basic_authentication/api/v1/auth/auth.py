@@ -19,25 +19,37 @@ class Auth:
 
         Args:
             path (str): The path to check.
-            excluded_paths (List[str]): List of paths that do not require authentication.
+            excluded_paths (List[str]): List of paths that do not require authentication,
+                                       may end with '*' to match any suffix.
 
         Returns:
             bool: True if authentication is required, False otherwise.
                   - Returns True if path is None.
                   - Returns True if excluded_paths is None or empty.
-                  - Returns False if path (slash-tolerant) is in excluded_paths.
-                  - Returns True if path is not in excluded_paths.
+                  - Returns False if path (slash-tolerant) matches an excluded path
+                    or starts with a prefix from an excluded path ending with '*'.
+                  - Returns True otherwise.
         """
         if path is None:
             return True
         if excluded_paths is None or not excluded_paths:
             return True
-        
-        # Normalize path and excluded_paths by removing trailing slashes
+
+        # Normalize path by removing trailing slash
         normalized_path = path.rstrip('/')
-        normalized_excluded = [p.rstrip('/') for p in excluded_paths]
-        
-        return normalized_path not in normalized_excluded
+
+        for excluded in excluded_paths:
+            # Normalize excluded path
+            normalized_excluded = excluded.rstrip('/')
+            # Check for wildcard
+            if normalized_excluded.endswith('*'):
+                prefix = normalized_excluded[:-1]
+                if normalized_path.startswith(prefix):
+                    return False
+            elif normalized_path == normalized_excluded:
+                return False
+
+        return True
 
     def authorization_header(self, request=None) -> str:
         """
