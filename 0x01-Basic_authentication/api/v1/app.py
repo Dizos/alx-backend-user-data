@@ -1,89 +1,56 @@
 #!/usr/bin/env python3
 """
-Flask application module for the user data API.
-Sets up the Flask app, error handlers, and request filtering.
+Main Flask app for the API.
 """
 
-from flask import Flask, jsonify, abort, request
-from flask_cors import CORS
 import os
+from flask import Flask, jsonify, abort, request
 from api.v1.views import app_views
+from api.v1.auth.auth import Auth
 
 app = Flask(__name__)
 app.register_blueprint(app_views)
-CORS(app=app)
 
 # Initialize auth based on AUTH_TYPE environment variable
 auth = None
-if os.getenv('AUTH_TYPE') == 'basic_auth':
+auth_type = os.getenv('AUTH_TYPE', '')
+if auth_type == 'basic_auth':
     from api.v1.auth.basic_auth import BasicAuth
     auth = BasicAuth()
-elif os.getenv('AUTH_TYPE') == 'auth':
-    from api.v1.auth.auth import Auth
+else:
     auth = Auth()
 
-
 @app.errorhandler(401)
-def unauthorized(error):
+def unauthorized(error) -> tuple:
     """
     Handle 401 Unauthorized errors.
 
-    Args:
-        error: The error object.
-
     Returns:
-        JSON response with error message and 401 status code.
+        tuple: JSON error message and HTTP status code 401.
     """
     return jsonify({"error": "Unauthorized"}), 401
 
 
 @app.errorhandler(403)
-def forbidden(error):
+def forbidden(error) -> tuple:
     """
     Handle 403 Forbidden errors.
 
-    Args:
-        error: The error object.
-
     Returns:
-        JSON response with error message and 401 status code.
+        tuple: JSON error message and HTTP status code 403.
     """
     return jsonify({"error": "Forbidden"}), 403
-
-
-@app.route('/debug_routes', methods=['GET'])
-def debug_routes():
-    """
-    List all registered routes for debugging.
-
-    Returns:
-        JSON response with list of routes, including endpoints, methods, and rules.
-    """
-    routes = []
-    for rule in sorted(app.url_map.iter_rules(), key=lambda x: x.rule):
-        routes.append({
-            'endpoint': rule.endpoint,
-            'methods': sorted(list(rule.methods)),
-            'rule': str(rule)
-        })
-    return jsonify(routes)
 
 
 @app.before_request
 def before_request():
     """
     Filter requests before processing to enforce authentication.
-
-    - Does nothing if auth is None.
-    - Does nothing if the request path is in ['/api/v1/status/',
-      '/api/v1/unauthorized/', '/api/v1/forbidden/'].
-    - Aborts with 401 if auth.authorization_header(request) returns None.
-    - Aborts with 403 if auth.current_user(request) returns None.
+    Checks if the path requires authentication and validates the user.
     """
     if auth is None:
         return
-    excluded_paths = ['/api/v1/status/', '/api/v1/unauthorized/',
-                      '/api/v1/forbidden/']
+    excluded_paths = ['/api/v1/status/', '/api/v1/unauthorized/', '/api/v1/forbidden/']
     if not auth.require_auth(request.path, excluded_paths):
         return
     if auth.authorization_header(request) is None:
@@ -93,6 +60,6 @@ def before_request():
 
 
 if __name__ == "__main__":
-    host = os.getenv("API_HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", 5000))
+    host = os.getenv('API_HOST', '0.0.0.0')
+    port = int(os.getenv('API_PORT', 5000))
     app.run(host=host, port=port)
