@@ -6,44 +6,46 @@ This module provides authentication-related utilities and the Auth class.
 from db import DB
 from user import User
 from sqlalchemy.orm.exc import NoResultFound
+import bcrypt
 
 def _hash_password(password: str) -> bytes:
-    """Hash a password using bcrypt with salt
-    
-    Args:
-        password: The password string to hash
-        
-    Returns:
-        Salted hash of the password as bytes
-    """
+    """Hash a password using bcrypt with salt"""
     password_bytes = password.encode('utf-8')
     return bcrypt.hashpw(password_bytes, bcrypt.gensalt())
 
 class Auth:
-    """Auth class to interact with the authentication database.
-    """
+    """Auth class to interact with the authentication database."""
     def __init__(self):
-        """Initialize a new Auth instance"""
         self._db = DB()
 
     def register_user(self, email: str, password: str) -> User:
-        """Register a new user
-        
-        Args:
-            email: User's email address
-            password: User's plain text password
-            
-        Returns:
-            The created User object
-            
-        Raises:
-            ValueError: If a user with the email already exists
-        """
+        """Register a new user"""
         try:
-            # Check if user already exists
             self._db.find_user_by(email=email)
             raise ValueError(f"User {email} already exists")
         except NoResultFound:
-            # User doesn't exist - proceed with registration
             hashed_password = _hash_password(password)
             return self._db.add_user(email, hashed_password.decode('utf-8'))
+
+    def valid_login(self, email: str, password: str) -> bool:
+        """Validate user credentials
+        
+        Args:
+            email: User's email address
+            password: Password to validate
+            
+        Returns:
+            True if credentials are valid, False otherwise
+        """
+        try:
+            # Find user by email
+            user = self._db.find_user_by(email=email)
+            
+            # Check password
+            password_bytes = password.encode('utf-8')
+            hashed_password = user.hashed_password.encode('utf-8')
+            
+            return bcrypt.checkpw(password_bytes, hashed_password)
+            
+        except (NoResultFound, InvalidRequestError):
+            return False
