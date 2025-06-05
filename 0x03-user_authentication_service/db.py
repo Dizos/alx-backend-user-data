@@ -5,6 +5,7 @@ This module provides a DB class to handle database operations.
 """
 from sqlalchemy import create_engine
 from sqlalchemy.exc import InvalidRequestError
+from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
@@ -50,3 +51,24 @@ class DB:
             self._session.rollback()
             raise e
         return new_user
+
+    def find_user_by(self, **kwargs) -> User:
+        """Find a user by arbitrary keyword arguments
+        
+        Args:
+            kwargs: Arbitrary keyword arguments to filter users
+            
+        Returns:
+            The first found User object matching the criteria
+            
+        Raises:
+            NoResultFound: When no user is found
+            InvalidRequestError: When wrong query arguments are passed
+        """
+        try:
+            user = self._session.query(User).filter_by(**kwargs).one()
+            return user
+        except NoResultFound:
+            raise NoResultFound("No user found with these criteria")
+        except InvalidRequestError as e:
+            raise InvalidRequestError("Invalid query arguments") from e
